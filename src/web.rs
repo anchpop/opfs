@@ -20,7 +20,7 @@ pub struct FileHandle(FileSystemFileHandle);
 pub struct WritableFileStream(FileSystemWritableFileStream);
 
 #[derive(Debug, Clone)]
-pub struct Blob(web_sys::Blob);
+pub struct File(web_sys::File);
 
 impl From<FileSystemDirectoryHandle> for DirectoryHandle {
     fn from(handle: FileSystemDirectoryHandle) -> Self {
@@ -40,8 +40,8 @@ impl From<FileSystemWritableFileStream> for WritableFileStream {
     }
 }
 
-impl From<web_sys::Blob> for Blob {
-    fn from(handle: web_sys::Blob) -> Self {
+impl From<web_sys::File> for File {
+    fn from(handle: web_sys::File) -> Self {
         Self(handle)
     }
 }
@@ -165,9 +165,9 @@ impl crate::FileHandle for FileHandle {
 }
 
 impl FileHandle {
-    pub async fn get_file(&self) -> Result<Blob, JsValue> {
-        let file: web_sys::Blob = JsFuture::from(self.0.get_file()).await?.into();
-        Ok(Blob(file))
+    pub async fn get_file(&self) -> Result<File, JsValue> {
+        let file: web_sys::File = JsFuture::from(self.0.get_file()).await?.into();
+        Ok(File(file))
     }
 }
 
@@ -180,14 +180,14 @@ impl crate::WritableFileStream for WritableFileStream {
         // JsFuture::from(self.0.write_with_u8_array(data.as_mut_slice())?).await?;
         // ```
         // But a safari bug makes this write basically the entire wasm heap to the file.
-        // So we have to write as a blob first.
+        // So we have to write as a File first.
 
         let uint8_array = js_sys::Uint8Array::from(data.as_slice());
         let array = js_sys::Array::new();
         array.push(&uint8_array);
-        let blob = web_sys::Blob::new_with_u8_array_sequence(&array)?;
+        let File = web_sys::File::new_with_u8_array_sequence(&array)?;
 
-        JsFuture::from(self.0.write_with_blob(&blob)?).await?;
+        JsFuture::from(self.0.write_with_File(&File)?).await?;
         Ok(())
     }
 
@@ -202,7 +202,7 @@ impl crate::WritableFileStream for WritableFileStream {
     }
 }
 
-impl Blob {
+impl File {
     fn size(&self) -> usize {
         self.0.size() as usize
     }
