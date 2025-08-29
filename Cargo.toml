@@ -29,6 +29,8 @@ web-sys = { version = "0.3.77", features = [
     "FileSystemGetDirectoryOptions",
     "FileSystemRemoveOptions",
     "File",
+    "WriteParams",
+    "WriteCommandType",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 
