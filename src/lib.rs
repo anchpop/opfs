@@ -58,6 +58,7 @@ pub mod native;
 
 use futures::Stream;
 use std::fmt::Debug;
+use std::ops::RangeBounds;
 
 mod private {
     pub trait Sealed {}
@@ -77,6 +78,21 @@ pub struct CreateWritableOptions {
 
 pub struct FileSystemRemoveOptions {
     pub recursive: bool,
+}
+
+#[derive(Debug, Clone)]
+pub enum WriteCommandType {
+    Write,
+    Seek,
+    Truncate,
+}
+
+#[derive(Debug, Clone)]
+pub struct WriteParams {
+    pub command_type: WriteCommandType,
+    pub data: Option<Vec<u8>>,
+    pub position: Option<usize>,
+    pub size: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +150,11 @@ pub trait FileHandle: Debug + private::Sealed {
 
     fn read(&self) -> impl std::future::Future<Output = Result<Vec<u8>, Self::Error>>;
 
+    fn read_range<R: RangeBounds<usize> + Send>(
+        &self,
+        range: R,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, Self::Error>>;
+
     fn size(&self) -> impl std::future::Future<Output = Result<usize, Self::Error>>;
 }
 
@@ -144,6 +165,13 @@ pub trait WritableFileStream: Debug + private::Sealed {
         &mut self,
         data: Vec<u8>,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
+
+    fn write_with_params(
+        &mut self,
+        params: &WriteParams,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
+
+    fn truncate(&mut self, size: usize) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 
     fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 

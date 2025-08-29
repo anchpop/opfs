@@ -20,7 +20,7 @@ pub struct FileHandle(FileSystemFileHandle);
 pub struct WritableFileStream(FileSystemWritableFileStream);
 
 #[derive(Debug, Clone)]
-pub struct Blob(web_sys::Blob);
+pub struct File(web_sys::File);
 
 impl From<FileSystemDirectoryHandle> for DirectoryHandle {
     fn from(handle: FileSystemDirectoryHandle) -> Self {
@@ -40,8 +40,8 @@ impl From<FileSystemWritableFileStream> for WritableFileStream {
     }
 }
 
-impl From<web_sys::Blob> for Blob {
-    fn from(handle: web_sys::Blob) -> Self {
+impl From<web_sys::File> for File {
+    fn from(handle: web_sys::File) -> Self {
         Self(handle)
     }
 }
@@ -158,6 +158,14 @@ impl crate::FileHandle for FileHandle {
         self.get_file().await?.read().await
     }
 
+    async fn read_range<R: std::ops::RangeBounds<usize> + Send>(
+        &self,
+        range: R,
+    ) -> Result<Vec<u8>, Self::Error> {
+        let file = self.get_file().await?;
+        file.read_range(range).await
+    }
+
     async fn size(&self) -> Result<usize, Self::Error> {
         let size = self.get_file().await?.size();
         Ok(size)
@@ -165,9 +173,9 @@ impl crate::FileHandle for FileHandle {
 }
 
 impl FileHandle {
-    pub async fn get_file(&self) -> Result<Blob, JsValue> {
-        let file: web_sys::Blob = JsFuture::from(self.0.get_file()).await?.into();
-        Ok(Blob(file))
+    pub async fn get_file(&self) -> Result<File, JsValue> {
+        let file: web_sys::File = JsFuture::from(self.0.get_file()).await?.into();
+        Ok(File(file))
     }
 }
 
@@ -180,14 +188,52 @@ impl crate::WritableFileStream for WritableFileStream {
         // JsFuture::from(self.0.write_with_u8_array(data.as_mut_slice())?).await?;
         // ```
         // But a safari bug makes this write basically the entire wasm heap to the file.
-        // So we have to write as a blob first.
+        // So we have to write as a File first.
 
         let uint8_array = js_sys::Uint8Array::from(data.as_slice());
         let array = js_sys::Array::new();
         array.push(&uint8_array);
-        let blob = web_sys::Blob::new_with_u8_array_sequence(&array)?;
+        let file = web_sys::File::new_with_u8_array_sequence(&array, "filename")?;
 
-        JsFuture::from(self.0.write_with_blob(&blob)?).await?;
+        JsFuture::from(self.0.write_with_blob(&file)?).await?;
+        Ok(())
+    }
+
+    async fn write_with_params(&mut self, params: &crate::WriteParams) -> Result<(), Self::Error> {
+        use crate::WriteCommandType;
+        use web_sys::{WriteCommandType as WebWriteCommandType, WriteParams as WebWriteParams};
+
+        let web_params = WebWriteParams::new(match params.command_type {
+            WriteCommandType::Write => WebWriteCommandType::Write,
+            WriteCommandType::Seek => WebWriteCommandType::Seek,
+            WriteCommandType::Truncate => WebWriteCommandType::Truncate,
+        });
+
+        // Set data if present
+        if let Some(data) = &params.data {
+            let uint8_array = js_sys::Uint8Array::from(data.as_slice());
+            let array = js_sys::Array::new();
+            array.push(&uint8_array);
+            let file = web_sys::File::new_with_u8_array_sequence(&array, "filename")?;
+            web_params.set_data(&file.into());
+        }
+
+        // Set position if present
+        if let Some(position) = params.position {
+            web_params.set_position(Some(position as f64));
+        }
+
+        // Set size if present
+        if let Some(size) = params.size {
+            web_params.set_size(Some(size as f64));
+        }
+
+        JsFuture::from(self.0.write_with_write_params(&web_params)?).await?;
+        Ok(())
+    }
+
+    async fn truncate(&mut self, size: usize) -> Result<(), Self::Error> {
+        JsFuture::from(self.0.truncate_with_u32(size as u32)?).await?;
         Ok(())
     }
 
@@ -202,7 +248,7 @@ impl crate::WritableFileStream for WritableFileStream {
     }
 }
 
-impl Blob {
+impl File {
     fn size(&self) -> usize {
         self.0.size() as usize
     }
@@ -211,6 +257,49 @@ impl Blob {
         let buffer = ArrayBuffer::unchecked_from_js(JsFuture::from(self.0.array_buffer()).await?);
         let uint8_array = Uint8Array::new(&buffer);
         let mut vec = vec![0; self.size()];
+        uint8_array.copy_to(&mut vec);
+        Ok(vec)
+    }
+
+    async fn read_range<R: std::ops::RangeBounds<usize>>(
+        &self,
+        range: R,
+    ) -> Result<Vec<u8>, JsValue> {
+        use std::ops::Bound;
+        use web_sys::Blob;
+
+        let size = self.size();
+
+        let start = match range.start_bound() {
+            Bound::Included(&n) => n,
+            Bound::Excluded(&n) => n + 1,
+            Bound::Unbounded => 0,
+        };
+
+        let end = match range.end_bound() {
+            Bound::Included(&n) => n + 1,
+            Bound::Excluded(&n) => n,
+            Bound::Unbounded => size,
+        };
+
+        if start >= size {
+            return Ok(Vec::new());
+        }
+
+        let actual_end = end.min(size);
+        if start >= actual_end {
+            return Ok(Vec::new());
+        }
+
+        // Use the slice method to get a portion of the file
+        let blob: Blob = self
+            .0
+            .slice_with_f64_and_f64(start as f64, actual_end as f64)?;
+
+        // Read the blob
+        let buffer = ArrayBuffer::unchecked_from_js(JsFuture::from(blob.array_buffer()).await?);
+        let uint8_array = Uint8Array::new(&buffer);
+        let mut vec = vec![0; actual_end - start];
         uint8_array.copy_to(&mut vec);
         Ok(vec)
     }

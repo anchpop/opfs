@@ -148,6 +148,40 @@ impl crate::FileHandle for FileHandle {
         Ok(data)
     }
 
+    async fn read_range<R: std::ops::RangeBounds<usize> + Send>(
+        &self,
+        range: R,
+    ) -> Result<Vec<u8>, Self::Error> {
+        use std::ops::Bound;
+        
+        let stream = self.0.stream.borrow();
+        let len = stream.len();
+        
+        let start = match range.start_bound() {
+            Bound::Included(&n) => n,
+            Bound::Excluded(&n) => n + 1,
+            Bound::Unbounded => 0,
+        };
+        
+        let end = match range.end_bound() {
+            Bound::Included(&n) => n + 1,
+            Bound::Excluded(&n) => n,
+            Bound::Unbounded => len,
+        };
+        
+        // Handle the case where start is beyond file size by returning empty vec
+        if start >= len {
+            return Ok(Vec::new());
+        }
+        
+        let actual_end = end.min(len);
+        if start > actual_end {
+            return Ok(Vec::new());
+        }
+        
+        Ok(stream[start..actual_end].to_vec())
+    }
+
     async fn size(&self) -> Result<usize, Self::Error> {
         Ok(self.0.len())
     }
@@ -168,6 +202,58 @@ impl crate::WritableFileStream for WritableFileStream {
 
         self.cursor_pos += data_len;
 
+        Ok(())
+    }
+
+    async fn write_with_params(&mut self, params: &crate::WriteParams) -> Result<(), Self::Error> {
+        use crate::WriteCommandType;
+        
+        match params.command_type {
+            WriteCommandType::Write => {
+                if let Some(data) = &params.data {
+                    if let Some(position) = params.position {
+                        // Write at specific position without changing cursor
+                        let data_len = data.len();
+                        let mut stream = self.stream.borrow_mut();
+                        
+                        // Ensure the stream is large enough
+                        if position + data_len > stream.len() {
+                            stream.resize(position + data_len, 0);
+                        }
+                        
+                        // Write data at position
+                        stream[position..position + data_len].copy_from_slice(data);
+                    } else {
+                        self.write_at_cursor_pos(data.clone()).await?;
+                    }
+                } else {
+                    return Err("Write command requires data".to_string());
+                }
+            }
+            WriteCommandType::Seek => {
+                if let Some(position) = params.position {
+                    self.seek(position).await?;
+                } else {
+                    return Err("Seek command requires position".to_string());
+                }
+            }
+            WriteCommandType::Truncate => {
+                if let Some(size) = params.size {
+                    self.truncate(size).await?;
+                } else {
+                    return Err("Truncate command requires size".to_string());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn truncate(&mut self, size: usize) -> Result<(), Self::Error> {
+        let mut stream = self.stream.borrow_mut();
+        stream.resize(size, 0);
+        if self.cursor_pos > size {
+            self.cursor_pos = size;
+        }
         Ok(())
     }
 
@@ -392,5 +478,137 @@ mod tests {
 
         let data = file.read().await.unwrap();
         assert_eq!(data, b" World");
+    }
+
+    #[tokio::test]
+    async fn test_read_range() {
+        let dir = DirectoryHandle::default();
+        let options = GetFileHandleOptions { create: true };
+
+        let mut file = dir
+            .get_file_handle_with_options("test.txt", &options)
+            .await
+            .unwrap();
+
+        let write_options = CreateWritableOptions {
+            keep_existing_data: false,
+        };
+        let mut writer = file
+            .create_writable_with_options(&write_options)
+            .await
+            .unwrap();
+        writer.write_at_cursor_pos(b"Hello, World!".to_vec()).await.unwrap();
+        writer.close().await.unwrap();
+
+        // Read from start to middle using exclusive range
+        let data = file.read_range(0..5).await.unwrap();
+        assert_eq!(data, b"Hello");
+
+        // Read from middle to end using RangeFrom
+        let data = file.read_range(7..).await.unwrap();
+        assert_eq!(data, b"World!");
+
+        // Read a middle section
+        let data = file.read_range(2..9).await.unwrap();
+        assert_eq!(data, b"llo, Wo");
+
+        // Read beyond file size
+        let data = file.read_range(100..).await.unwrap();
+        assert_eq!(data, b"");
+
+        // Read using inclusive range
+        let data = file.read_range(0..=4).await.unwrap();
+        assert_eq!(data, b"Hello");
+
+        // Read everything using RangeFull
+        let data = file.read_range(..).await.unwrap();
+        assert_eq!(data, b"Hello, World!");
+    }
+
+    #[tokio::test]
+    async fn test_truncate() {
+        let dir = DirectoryHandle::default();
+        let options = GetFileHandleOptions { create: true };
+
+        let mut file = dir
+            .get_file_handle_with_options("test.txt", &options)
+            .await
+            .unwrap();
+
+        let write_options = CreateWritableOptions {
+            keep_existing_data: false,
+        };
+        let mut writer = file
+            .create_writable_with_options(&write_options)
+            .await
+            .unwrap();
+        writer.write_at_cursor_pos(b"Hello, World!".to_vec()).await.unwrap();
+        writer.truncate(5).await.unwrap();
+        writer.close().await.unwrap();
+
+        let data = file.read().await.unwrap();
+        assert_eq!(data, b"Hello");
+        assert_eq!(file.size().await.unwrap(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_write_with_params() {
+        use crate::{WriteParams, WriteCommandType};
+        
+        let dir = DirectoryHandle::default();
+        let options = GetFileHandleOptions { create: true };
+
+        let mut file = dir
+            .get_file_handle_with_options("test.txt", &options)
+            .await
+            .unwrap();
+
+        let write_options = CreateWritableOptions {
+            keep_existing_data: false,
+        };
+        let mut writer = file
+            .create_writable_with_options(&write_options)
+            .await
+            .unwrap();
+
+        // Write at the beginning
+        let params = WriteParams {
+            command_type: WriteCommandType::Write,
+            data: Some(b"Hello".to_vec()),
+            position: None,
+            size: None,
+        };
+        writer.write_with_params(&params).await.unwrap();
+
+        // Seek and write
+        let params = WriteParams {
+            command_type: WriteCommandType::Seek,
+            data: None,
+            position: Some(2),
+            size: None,
+        };
+        writer.write_with_params(&params).await.unwrap();
+
+        let params = WriteParams {
+            command_type: WriteCommandType::Write,
+            data: Some(b"XXX".to_vec()),
+            position: None,
+            size: None,
+        };
+        writer.write_with_params(&params).await.unwrap();
+
+        // Write at specific position
+        let params = WriteParams {
+            command_type: WriteCommandType::Write,
+            data: Some(b"!".to_vec()),
+            position: Some(0),
+            size: None,
+        };
+        writer.write_with_params(&params).await.unwrap();
+
+        writer.close().await.unwrap();
+
+        let data = file.read().await.unwrap();
+        assert_eq!(data, b"!eXXX");
     }
 }
