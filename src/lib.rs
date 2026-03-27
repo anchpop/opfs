@@ -23,7 +23,7 @@
 //!     let write_options = CreateWritableOptions { keep_existing_data: false };
 //!     let mut writer = file.create_writable_with_options(&write_options).await?;
 //!     
-//!     writer.write_at_cursor_pos(b"Hello, world!".to_vec()).await?;
+//!     writer.write_at_cursor_pos(b"Hello, world!").await?;
 //!     writer.close().await?;
 //!     
 //!     let data = file.read().await?;
@@ -163,7 +163,7 @@ pub trait WritableFileStream: Debug + private::Sealed {
 
     fn write_at_cursor_pos(
         &mut self,
-        data: Vec<u8>,
+        data: &[u8],
     ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 
     fn write_with_params(
@@ -171,7 +171,10 @@ pub trait WritableFileStream: Debug + private::Sealed {
         params: &WriteParams,
     ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 
-    fn truncate(&mut self, size: usize) -> impl std::future::Future<Output = Result<(), Self::Error>>;
+    fn truncate(
+        &mut self,
+        size: usize,
+    ) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 
     fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>>;
 

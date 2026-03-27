@@ -178,30 +178,30 @@ impl crate::FileHandle for FileHandle {
 
         let mut file = tokio::fs::File::open(&self.0).await?;
         let file_size = file.metadata().await?.len() as usize;
-        
+
         let start = match range.start_bound() {
             Bound::Included(&n) => n,
             Bound::Excluded(&n) => n + 1,
             Bound::Unbounded => 0,
         };
-        
+
         let end = match range.end_bound() {
             Bound::Included(&n) => n + 1,
             Bound::Excluded(&n) => n,
             Bound::Unbounded => file_size,
         };
-        
+
         if start >= file_size {
             return Ok(Vec::new());
         }
-        
+
         let actual_end = end.min(file_size);
         let bytes_to_read = actual_end.saturating_sub(start);
-        
+
         if bytes_to_read == 0 {
             return Ok(Vec::new());
         }
-        
+
         file.seek(SeekFrom::Start(start as u64)).await?;
         let mut buffer = vec![0; bytes_to_read];
         file.read_exact(&mut buffer).await?;
@@ -217,17 +217,17 @@ impl crate::FileHandle for FileHandle {
 impl crate::WritableFileStream for WritableFileStream {
     type Error = std::io::Error;
 
-    async fn write_at_cursor_pos(&mut self, data: Vec<u8>) -> Result<(), Self::Error> {
+    async fn write_at_cursor_pos(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         let mut file = self.0.write().await;
-        file.write_all(&data).await?;
+        file.write_all(data).await?;
         Ok(())
     }
 
     async fn write_with_params(&mut self, params: &crate::WriteParams) -> Result<(), Self::Error> {
         use crate::WriteCommandType;
-        
+
         let mut file = self.0.write().await;
-        
+
         match params.command_type {
             WriteCommandType::Write => {
                 if let Some(data) = &params.data {
@@ -319,8 +319,8 @@ mod tests {
             .await
             .unwrap();
 
-        let data = b"Hello, world!".to_vec();
-        writer.write_at_cursor_pos(data.clone()).await.unwrap();
+        let data = b"Hello, world!";
+        writer.write_at_cursor_pos(data).await.unwrap();
         writer.close().await.unwrap();
 
         let read_data = file.read().await.unwrap();
@@ -444,9 +444,9 @@ mod tests {
             .await
             .unwrap();
 
-        writer.write_at_cursor_pos(b"Hello".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello").await.unwrap();
         writer.seek(0).await.unwrap();
-        writer.write_at_cursor_pos(b"Hi".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hi").await.unwrap();
         writer.close().await.unwrap();
 
         let data = file.read().await.unwrap();
@@ -471,7 +471,7 @@ mod tests {
             .create_writable_with_options(&write_options)
             .await
             .unwrap();
-        writer.write_at_cursor_pos(b"Hello".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello").await.unwrap();
         writer.close().await.unwrap();
 
         // Write more data keeping existing
@@ -482,10 +482,7 @@ mod tests {
             .create_writable_with_options(&keep_options)
             .await
             .unwrap();
-        writer2
-            .write_at_cursor_pos(b" World".to_vec())
-            .await
-            .unwrap();
+        writer2.write_at_cursor_pos(b" World").await.unwrap();
         writer2.close().await.unwrap();
 
         let data = file.read().await.unwrap();
@@ -510,10 +507,7 @@ mod tests {
             .create_writable_with_options(&write_options)
             .await
             .unwrap();
-        writer
-            .write_at_cursor_pos(b"Hello World".to_vec())
-            .await
-            .unwrap();
+        writer.write_at_cursor_pos(b"Hello World").await.unwrap();
         writer.close().await.unwrap();
 
         // Truncate and write new data
@@ -524,7 +518,7 @@ mod tests {
             .create_writable_with_options(&truncate_options)
             .await
             .unwrap();
-        writer2.write_at_cursor_pos(b"Hi".to_vec()).await.unwrap();
+        writer2.write_at_cursor_pos(b"Hi").await.unwrap();
         writer2.close().await.unwrap();
 
         let data = file.read().await.unwrap();
@@ -548,7 +542,7 @@ mod tests {
             .create_writable_with_options(&write_options)
             .await
             .unwrap();
-        writer.write_at_cursor_pos(b"Hello, World!".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello, World!").await.unwrap();
         writer.close().await.unwrap();
 
         // Test various range types
@@ -562,8 +556,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_truncate_and_write_params() {
-        use crate::{WriteParams, WriteCommandType};
-        
+        use crate::{WriteCommandType, WriteParams};
+
         let (_temp_dir, dir) = setup_temp_dir().await;
         let options = GetFileHandleOptions { create: true };
 
@@ -581,8 +575,8 @@ mod tests {
             .unwrap();
 
         // Write initial data
-        writer.write_at_cursor_pos(b"Hello, World!".to_vec()).await.unwrap();
-        
+        writer.write_at_cursor_pos(b"Hello, World!").await.unwrap();
+
         // Truncate using WriteParams
         let truncate_params = WriteParams {
             command_type: WriteCommandType::Truncate,
@@ -591,7 +585,7 @@ mod tests {
             size: Some(5),
         };
         writer.write_with_params(&truncate_params).await.unwrap();
-        
+
         writer.close().await.unwrap();
 
         let data = file.read().await.unwrap();

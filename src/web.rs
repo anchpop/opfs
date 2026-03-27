@@ -182,7 +182,7 @@ impl FileHandle {
 impl crate::WritableFileStream for WritableFileStream {
     type Error = JsValue;
 
-    async fn write_at_cursor_pos(&mut self, data: Vec<u8>) -> Result<(), Self::Error> {
+    async fn write_at_cursor_pos(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         // You'd think we could just do
         // ```
         // JsFuture::from(self.0.write_with_u8_array(data.as_mut_slice())?).await?;
@@ -190,7 +190,7 @@ impl crate::WritableFileStream for WritableFileStream {
         // But a safari bug makes this write basically the entire wasm heap to the file.
         // So we have to write as a File first.
 
-        let uint8_array = js_sys::Uint8Array::from(data.as_slice());
+        let uint8_array = js_sys::Uint8Array::from(data);
         let array = js_sys::Array::new();
         array.push(&uint8_array);
         let file = web_sys::File::new_with_u8_array_sequence(&array, "filename")?;

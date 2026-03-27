@@ -2,47 +2,69 @@
 
 use opfs::persistent::{DirectoryHandle, app_specific_dir};
 use opfs::{
-    CreateWritableOptions, GetFileHandleOptions, 
-    WriteParams, WriteCommandType,
-    DirectoryHandle as _, FileHandle as _, WritableFileStream as _
+    CreateWritableOptions, DirectoryHandle as _, FileHandle as _, GetFileHandleOptions,
+    WritableFileStream as _, WriteCommandType, WriteParams,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get the app-specific directory
     let dir: DirectoryHandle = app_specific_dir().await?;
-    
+
     // Create a file
     let options = GetFileHandleOptions { create: true };
-    let mut file = dir.get_file_handle_with_options("example.txt", &options).await?;
-    
+    let mut file = dir
+        .get_file_handle_with_options("example.txt", &options)
+        .await?;
+
     // Write some initial content
-    let write_options = CreateWritableOptions { keep_existing_data: false };
+    let write_options = CreateWritableOptions {
+        keep_existing_data: false,
+    };
     let mut writer = file.create_writable_with_options(&write_options).await?;
-    
-    writer.write_at_cursor_pos(b"Hello, World! This is a test file.".to_vec()).await?;
+
+    writer
+        .write_at_cursor_pos(b"Hello, World! This is a test file.")
+        .await?;
     writer.close().await?;
-    
+
     // Demonstrate reading ranges
-    println!("Full file content: {:?}", String::from_utf8(file.read().await?)?);
-    
+    println!(
+        "Full file content: {:?}",
+        String::from_utf8(file.read().await?)?
+    );
+
     // Read the first 5 bytes
-    println!("First 5 bytes: {:?}", String::from_utf8(file.read_range(0..5).await?)?);
-    
+    println!(
+        "First 5 bytes: {:?}",
+        String::from_utf8(file.read_range(0..5).await?)?
+    );
+
     // Read from byte 7 to the end
-    println!("From byte 7 to end: {:?}", String::from_utf8(file.read_range(7..).await?)?);
-    
+    println!(
+        "From byte 7 to end: {:?}",
+        String::from_utf8(file.read_range(7..).await?)?
+    );
+
     // Read bytes 7-12 (inclusive)
-    println!("Bytes 7-12 inclusive: {:?}", String::from_utf8(file.read_range(7..=12).await?)?);
-    
+    println!(
+        "Bytes 7-12 inclusive: {:?}",
+        String::from_utf8(file.read_range(7..=12).await?)?
+    );
+
     // Read everything using RangeFull
-    println!("Everything: {:?}", String::from_utf8(file.read_range(..).await?)?);
-    
+    println!(
+        "Everything: {:?}",
+        String::from_utf8(file.read_range(..).await?)?
+    );
+
     // Demonstrate advanced write operations with WriteParams
-    let mut writer = file.create_writable_with_options(&CreateWritableOptions { 
-        keep_existing_data: true 
-    }).await?;
-    
+    let mut writer = file
+        .create_writable_with_options(&CreateWritableOptions {
+            keep_existing_data: true,
+        })
+        .await?;
+
     // Write at a specific position
     let params = WriteParams {
         command_type: WriteCommandType::Write,
@@ -51,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         size: None,
     };
     writer.write_with_params(&params).await?;
-    
+
     // Truncate the file
     let params = WriteParams {
         command_type: WriteCommandType::Truncate,
@@ -60,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         size: Some(20),
     };
     writer.write_with_params(&params).await?;
-    
+
     // Seek and write
     let params = WriteParams {
         command_type: WriteCommandType::Seek,
@@ -69,12 +91,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         size: None,
     };
     writer.write_with_params(&params).await?;
-    writer.write_at_cursor_pos(b"!!!".to_vec()).await?;
-    
+    writer.write_at_cursor_pos(b"!!!").await?;
+
     writer.close().await?;
-    
-    println!("Final file content: {:?}", String::from_utf8(file.read().await?)?);
+
+    println!(
+        "Final file content: {:?}",
+        String::from_utf8(file.read().await?)?
+    );
     println!("File size: {} bytes", file.size().await?);
-    
+
     Ok(())
 }

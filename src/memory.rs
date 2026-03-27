@@ -91,7 +91,7 @@ impl crate::DirectoryHandle for DirectoryHandle {
         options: &crate::FileSystemRemoveOptions,
     ) -> Result<(), Self::Error> {
         let mut directory = self.0.borrow_mut();
-        
+
         if let Some(entry) = directory.get(name) {
             match entry {
                 DirectoryEntry::Directory(dir) if !options.recursive => {
@@ -102,7 +102,7 @@ impl crate::DirectoryHandle for DirectoryHandle {
                 _ => {}
             }
         }
-        
+
         directory.remove(name);
         Ok(())
     }
@@ -153,32 +153,32 @@ impl crate::FileHandle for FileHandle {
         range: R,
     ) -> Result<Vec<u8>, Self::Error> {
         use std::ops::Bound;
-        
+
         let stream = self.0.stream.borrow();
         let len = stream.len();
-        
+
         let start = match range.start_bound() {
             Bound::Included(&n) => n,
             Bound::Excluded(&n) => n + 1,
             Bound::Unbounded => 0,
         };
-        
+
         let end = match range.end_bound() {
             Bound::Included(&n) => n + 1,
             Bound::Excluded(&n) => n,
             Bound::Unbounded => len,
         };
-        
+
         // Handle the case where start is beyond file size by returning empty vec
         if start >= len {
             return Ok(Vec::new());
         }
-        
+
         let actual_end = end.min(len);
         if start > actual_end {
             return Ok(Vec::new());
         }
-        
+
         Ok(stream[start..actual_end].to_vec())
     }
 
@@ -190,15 +190,13 @@ impl crate::FileHandle for FileHandle {
 impl crate::WritableFileStream for WritableFileStream {
     type Error = String;
 
-    async fn write_at_cursor_pos(&mut self, data: Vec<u8>) -> Result<(), Self::Error> {
+    async fn write_at_cursor_pos(&mut self, data: &[u8]) -> Result<(), Self::Error> {
         let data_len = data.len();
 
         let mut stream = self.stream.borrow_mut();
-        *stream = stream[0..self.cursor_pos]
-            .iter()
-            .cloned()
-            .chain(data)
-            .collect::<Vec<u8>>();
+        let mut new_stream = stream[0..self.cursor_pos].to_vec();
+        new_stream.extend_from_slice(data);
+        *stream = new_stream;
 
         self.cursor_pos += data_len;
 
@@ -207,7 +205,7 @@ impl crate::WritableFileStream for WritableFileStream {
 
     async fn write_with_params(&mut self, params: &crate::WriteParams) -> Result<(), Self::Error> {
         use crate::WriteCommandType;
-        
+
         match params.command_type {
             WriteCommandType::Write => {
                 if let Some(data) = &params.data {
@@ -215,16 +213,16 @@ impl crate::WritableFileStream for WritableFileStream {
                         // Write at specific position without changing cursor
                         let data_len = data.len();
                         let mut stream = self.stream.borrow_mut();
-                        
+
                         // Ensure the stream is large enough
                         if position + data_len > stream.len() {
                             stream.resize(position + data_len, 0);
                         }
-                        
+
                         // Write data at position
                         stream[position..position + data_len].copy_from_slice(data);
                     } else {
-                        self.write_at_cursor_pos(data.clone()).await?;
+                        self.write_at_cursor_pos(data).await?;
                     }
                 } else {
                     return Err("Write command requires data".to_string());
@@ -320,8 +318,8 @@ mod tests {
             .await
             .unwrap();
 
-        let data = b"Hello, world!".to_vec();
-        writer.write_at_cursor_pos(data.clone()).await.unwrap();
+        let data = b"Hello, world!";
+        writer.write_at_cursor_pos(data).await.unwrap();
         writer.close().await.unwrap();
 
         let read_data = file.read().await.unwrap();
@@ -409,9 +407,9 @@ mod tests {
             .await
             .unwrap();
 
-        writer.write_at_cursor_pos(b"Hello".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello").await.unwrap();
         writer.seek(0).await.unwrap();
-        writer.write_at_cursor_pos(b"Hi".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hi").await.unwrap();
         writer.close().await.unwrap();
 
         let data = file.read().await.unwrap();
@@ -436,7 +434,7 @@ mod tests {
             .await
             .unwrap();
 
-        writer.write_at_cursor_pos(b"Hello".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello").await.unwrap();
 
         let result = writer.seek(10).await;
         assert!(result.is_err());
@@ -460,7 +458,7 @@ mod tests {
             .create_writable_with_options(&write_options)
             .await
             .unwrap();
-        writer.write_at_cursor_pos(b"Hello".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello").await.unwrap();
         writer.close().await.unwrap();
 
         let keep_options = CreateWritableOptions {
@@ -470,10 +468,7 @@ mod tests {
             .create_writable_with_options(&keep_options)
             .await
             .unwrap();
-        writer2
-            .write_at_cursor_pos(b" World".to_vec())
-            .await
-            .unwrap();
+        writer2.write_at_cursor_pos(b" World").await.unwrap();
         writer2.close().await.unwrap();
 
         let data = file.read().await.unwrap();
@@ -497,7 +492,7 @@ mod tests {
             .create_writable_with_options(&write_options)
             .await
             .unwrap();
-        writer.write_at_cursor_pos(b"Hello, World!".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello, World!").await.unwrap();
         writer.close().await.unwrap();
 
         // Read from start to middle using exclusive range
@@ -542,7 +537,7 @@ mod tests {
             .create_writable_with_options(&write_options)
             .await
             .unwrap();
-        writer.write_at_cursor_pos(b"Hello, World!".to_vec()).await.unwrap();
+        writer.write_at_cursor_pos(b"Hello, World!").await.unwrap();
         writer.truncate(5).await.unwrap();
         writer.close().await.unwrap();
 
@@ -553,8 +548,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_write_with_params() {
-        use crate::{WriteParams, WriteCommandType};
-        
+        use crate::{WriteCommandType, WriteParams};
+
         let dir = DirectoryHandle::default();
         let options = GetFileHandleOptions { create: true };
 

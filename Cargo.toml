@@ -1,6 +1,6 @@
 [package]
 name = "opfs"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2024"
 repository = "https://github.com/anchpop/opfs.git"
 license = "MIT"
