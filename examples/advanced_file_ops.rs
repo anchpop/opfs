@@ -1,11 +1,17 @@
 //! Example demonstrating advanced file operations with the OPFS library
 
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 use opfs::persistent::{DirectoryHandle, app_specific_dir};
+#[cfg(not(target_arch = "wasm32"))]
 use opfs::{
     CreateWritableOptions, DirectoryHandle as _, FileHandle as _, GetFileHandleOptions,
     WritableFileStream as _, WriteCommandType, WriteParams,
 };
 
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get the app-specific directory

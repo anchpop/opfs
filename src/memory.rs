@@ -92,15 +92,11 @@ impl crate::DirectoryHandle for DirectoryHandle {
     ) -> Result<(), Self::Error> {
         let mut directory = self.0.borrow_mut();
 
-        if let Some(entry) = directory.get(name) {
-            match entry {
-                DirectoryEntry::Directory(dir) if !options.recursive => {
-                    if !dir.0.borrow().is_empty() {
-                        return Err(format!("Directory '{}' is not empty", name));
-                    }
-                }
-                _ => {}
-            }
+        if let Some(DirectoryEntry::Directory(dir)) = directory.get(name)
+            && !options.recursive
+            && !dir.0.borrow().is_empty()
+        {
+            return Err(format!("Directory '{name}' is not empty"));
         }
 
         directory.remove(name);
@@ -291,7 +287,7 @@ impl WritableFileStream {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
     use crate::{

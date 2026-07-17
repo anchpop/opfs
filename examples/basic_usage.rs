@@ -6,12 +6,19 @@
 //! - Reading data from a file
 //! - Directory operations
 
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(not(target_arch = "wasm32"))]
 use opfs::persistent::{DirectoryHandle, FileHandle, WritableFileStream, app_specific_dir};
+#[cfg(not(target_arch = "wasm32"))]
 use opfs::{CreateWritableOptions, GetFileHandleOptions};
 
 // Import the traits to call methods on the types
+#[cfg(not(target_arch = "wasm32"))]
 use opfs::{DirectoryHandle as _, FileHandle as _, WritableFileStream as _};
 
+#[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get the app-specific directory (works on both native and web)

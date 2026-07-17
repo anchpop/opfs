@@ -1,6 +1,6 @@
 use futures::Stream;
 use futures::StreamExt;
-use js_sys::{ArrayBuffer, AsyncIterator, Uint8Array};
+use js_sys::{ArrayBuffer, Uint8Array};
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen_futures::{JsFuture, stream::JsStream};
 use web_sys::{
@@ -102,8 +102,7 @@ impl crate::DirectoryHandle for DirectoryHandle {
         &self,
     ) -> Result<impl Stream<Item = Result<(String, DirectoryEntry), Self::Error>>, Self::Error>
     {
-        let entries_iterator = self.0.entries();
-        let async_iterator = AsyncIterator::from(entries_iterator);
+        let async_iterator = self.0.entries();
         let js_stream: JsStream = JsStream::from(async_iterator);
 
         let stream = js_stream.map(|item| {
@@ -173,6 +172,10 @@ impl crate::FileHandle for FileHandle {
 }
 
 impl FileHandle {
+    pub(crate) fn inner(&self) -> &FileSystemFileHandle {
+        &self.0
+    }
+
     pub async fn get_file(&self) -> Result<File, JsValue> {
         let file: web_sys::File = JsFuture::from(self.0.get_file()).await?.into();
         Ok(File(file))

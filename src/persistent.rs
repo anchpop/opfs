@@ -13,14 +13,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// On web platforms, this returns the root OPFS directory.
 #[cfg(target_arch = "wasm32")]
 pub async fn app_specific_dir() -> Result<DirectoryHandle> {
+    use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
     use web_sys::FileSystemDirectoryHandle;
 
-    let window = web_sys::window().ok_or("No window object")?;
-    let navigator = window.navigator();
+    let storage = if let Some(window) = web_sys::window() {
+        window.navigator().storage()
+    } else {
+        js_sys::global()
+            .dyn_into::<web_sys::WorkerGlobalScope>()?
+            .navigator()
+            .storage()
+    };
 
     let root_directory_handle =
-        FileSystemDirectoryHandle::from(JsFuture::from(navigator.storage().get_directory()).await?);
+        FileSystemDirectoryHandle::from(JsFuture::from(storage.get_directory()).await?);
 
     Ok(DirectoryHandle::from(root_directory_handle))
 }

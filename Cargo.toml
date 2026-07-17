@@ -7,8 +7,14 @@ license = "MIT"
 authors = ["Andre Popovitch <andre@popovit.ch>"]
 description = "A Rust implementation of the Origin Private File System browser API."
 
+[features]
+default = []
+sync-access = []
+redb = ["sync-access", "dep:redb"]
+
 [dependencies]
 futures = "0.3.31"
+redb = { version = "4.1", optional = true }
 wasm-bindgen = "0.2.84"
 wasm-bindgen-futures = { version = "0.4", features = [
     "futures-core-03-stream",
@@ -31,6 +37,10 @@ web-sys = { version = "0.3.77", features = [
     "File",
     "WriteParams",
     "WriteCommandType",
+    "FileSystemSyncAccessHandle",
+    "FileSystemReadWriteOptions",
+    "WorkerGlobalScope",
+    "WorkerNavigator",
 ] }
 serde = { version = "1.0", features = ["derive"] }
 
@@ -40,3 +50,4 @@ dirs = "5.0"
 
 [dev-dependencies]
 tempfile = "3.20"
+wasm-bindgen-test = "0.3"

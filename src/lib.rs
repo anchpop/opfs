@@ -53,6 +53,12 @@ pub mod persistent;
 #[cfg(target_arch = "wasm32")]
 pub mod web;
 
+#[cfg(all(target_arch = "wasm32", feature = "sync-access"))]
+pub mod sync_access;
+
+#[cfg(all(target_arch = "wasm32", feature = "redb"))]
+pub mod redb;
+
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 
