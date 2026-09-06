@@ -14,6 +14,9 @@ use opfs::{DirectoryHandle as _, FileHandle as _, WritableFileStream as _};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Native hosts choose their stable application identity once at startup.
+    opfs::persistent::configure_app("org", "OPFS", "Examples")?;
+
     // Get the app-specific directory (works on both native and web)
     let dir: DirectoryHandle = app_specific_dir().await?;
 

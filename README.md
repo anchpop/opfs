@@ -43,7 +43,7 @@ async fn example(dir: DirectoryHandle) -> persistent::Result<()> {
     let write_options = CreateWritableOptions { keep_existing_data: false };
     let mut writer = file.create_writable_with_options(&write_options).await?;
     
-    writer.write_at_cursor_pos(b"Hello, world!".to_vec()).await?;
+    writer.write_at_cursor_pos(b"Hello, world!").await?;
     writer.close().await?;
     
     let data = file.read().await?;
@@ -53,8 +53,33 @@ async fn example(dir: DirectoryHandle) -> persistent::Result<()> {
 }
 
 async fn use_example() -> persistent::Result<()> {
+    // Call once at native startup; browsers already have an origin-specific root.
+    #[cfg(not(target_arch = "wasm32"))]
+    persistent::configure_app("org", "OPFS", "Example")?;
     let directory: DirectoryHandle = app_specific_dir().await?;
     example(directory).await?;
     Ok(())
 }
 ```
+
+## Native storage configuration
+
+Before opening persistent storage, the native host calls
+`persistent::configure_app(qualifier, organization, application)` once. Desktop
+platforms use `directories::ProjectDirs::data_local_dir()`; iOS uses Foundation's
+Application Support directory inside the app container. Use a stable identity
+across app launches. Qualifier and organization may be empty.
+
+For isolated tests or a host-selected location, call
+`persistent::configure_root(path)` instead. Relative paths are resolved at
+configuration time. Configuration selects the path without creating or moving
+files; `app_specific_dir().await` creates it when needed. Missing configuration
+and repeated configuration return errors. Existing directory handles can never
+be redirected by changing the process configuration.
+
+The browser needs no configuration: `app_specific_dir()` continues to return
+the origin's OPFS root. These setup functions are native-only.
+
+Earlier native versions returned the user's shared data directory. Applications
+with existing data should select their previous app directory explicitly or
+perform their own migration; OPFS does not move existing files.

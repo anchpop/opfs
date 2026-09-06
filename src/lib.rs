@@ -33,6 +33,9 @@
 //! }
 //!
 //! async fn use_example() -> persistent::Result<()> {
+//!     // Call once at native startup; browsers already have an origin-specific root.
+//!     #[cfg(not(target_arch = "wasm32"))]
+//!     persistent::configure_app("org", "OPFS", "Example")?;
 //!     let directory: DirectoryHandle = app_specific_dir().await?;
 //!     example(directory).await?;
 //!     Ok(())

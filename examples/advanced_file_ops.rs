@@ -8,6 +8,9 @@ use opfs::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Native hosts choose their stable application identity once at startup.
+    opfs::persistent::configure_app("org", "OPFS", "Examples")?;
+
     // Get the app-specific directory
     let dir: DirectoryHandle = app_specific_dir().await?;
 

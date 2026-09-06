@@ -4,13 +4,17 @@ pub use crate::web::{DirectoryHandle, FileHandle, WritableFileStream};
 #[cfg(not(target_arch = "wasm32"))]
 pub use crate::native::{DirectoryHandle, FileHandle, WritableFileStream};
 
+#[cfg(not(target_arch = "wasm32"))]
+mod native_root;
+#[cfg(not(target_arch = "wasm32"))]
+pub use native_root::{configure_app, configure_root};
+
 pub type Error = <DirectoryHandle as crate::DirectoryHandle>::Error;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Returns a directory handle for app-specific data storage.
 ///
-/// On native platforms, this returns the user's data directory (e.g., ~/.local/share on Linux).
-/// On web platforms, this returns the root OPFS directory.
+/// On web platforms, this returns the origin's root OPFS directory. No setup is needed.
 #[cfg(target_arch = "wasm32")]
 pub async fn app_specific_dir() -> Result<DirectoryHandle> {
     use wasm_bindgen_futures::JsFuture;
@@ -27,19 +31,13 @@ pub async fn app_specific_dir() -> Result<DirectoryHandle> {
 
 /// Returns a directory handle for app-specific data storage.
 ///
-/// On native platforms, this returns the user's data directory (e.g., ~/.local/share on Linux).
-/// On web platforms, this returns the root OPFS directory.
+/// Configure native storage once with [`configure_app`] or [`configure_root`]
+/// before calling this function. Creates the configured directory if necessary.
+/// Returns an error when storage has not been configured; never falls back to
+/// the user's shared data directory.
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn app_specific_dir() -> Result<DirectoryHandle> {
-    let data_dir = dirs::data_dir().ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "Could not find user data directory",
-        )
-    })?;
-
-    // Ensure the directory exists
-    std::fs::create_dir_all(&data_dir)?;
-
-    Ok(DirectoryHandle::from(data_dir))
+    let root = native_root::configured_root()?;
+    tokio::fs::create_dir_all(root).await?;
+    Ok(DirectoryHandle::from(root.to_owned()))
 }

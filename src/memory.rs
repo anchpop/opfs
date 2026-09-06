@@ -94,10 +94,10 @@ impl crate::DirectoryHandle for DirectoryHandle {
 
         if let Some(entry) = directory.get(name) {
             match entry {
-                DirectoryEntry::Directory(dir) if !options.recursive => {
-                    if !dir.0.borrow().is_empty() {
-                        return Err(format!("Directory '{}' is not empty", name));
-                    }
+                DirectoryEntry::Directory(dir)
+                    if !options.recursive && !dir.0.borrow().is_empty() =>
+                {
+                    return Err(format!("Directory '{}' is not empty", name));
                 }
                 _ => {}
             }
