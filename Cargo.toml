@@ -1,6 +1,6 @@
 [package]
 name = "opfs"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 repository = "https://github.com/anchpop/opfs.git"
 license = "MIT"
@@ -25,6 +25,8 @@ web-sys = { version = "0.3.77", features = [
     "FileSystemCreateWritableOptions",
     "Blob",
     "Navigator",
+    "WorkerGlobalScope",
+    "WorkerNavigator",
     "StorageManager",
     "FileSystemGetDirectoryOptions",
     "FileSystemRemoveOptions",

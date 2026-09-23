@@ -15,16 +15,26 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Returns a directory handle for app-specific data storage.
 ///
 /// On web platforms, this returns the origin's root OPFS directory. No setup is needed.
+///
+/// Works on the main thread and in Web Workers: the origin's storage is
+/// reached through whichever global scope the code is running in.
 #[cfg(target_arch = "wasm32")]
 pub async fn app_specific_dir() -> Result<DirectoryHandle> {
+    use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
     use web_sys::FileSystemDirectoryHandle;
 
-    let window = web_sys::window().ok_or("No window object")?;
-    let navigator = window.navigator();
+    let global = js_sys::global();
+    let storage = if let Some(window) = global.dyn_ref::<web_sys::Window>() {
+        window.navigator().storage()
+    } else if let Some(worker) = global.dyn_ref::<web_sys::WorkerGlobalScope>() {
+        worker.navigator().storage()
+    } else {
+        return Err("No window or worker global scope".into());
+    };
 
     let root_directory_handle =
-        FileSystemDirectoryHandle::from(JsFuture::from(navigator.storage().get_directory()).await?);
+        FileSystemDirectoryHandle::from(JsFuture::from(storage.get_directory()).await?);
 
     Ok(DirectoryHandle::from(root_directory_handle))
 }
